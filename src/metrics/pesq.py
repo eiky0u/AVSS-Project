@@ -1,64 +1,76 @@
 import torch
-from torchmetrics.functional.audio import (
-    permutation_invariant_training as pit,
-)
 from torchmetrics.functional.audio.pesq import (
     perceptual_evaluation_speech_quality as pesq,
 )
-
 from src.metrics.base_metric import BaseMetric
 
 
 class PESQ(BaseMetric):
     """
-    PESQ (Perceptual Evaluation of Speech Quality), wideband mode.
+    PESQ (Perceptual Evaluation of Speech Quality) for ordered speakers (no PIT).
 
-    Shapes:
-        target: [B, S, T]  — ground-truth sources (S speakers)
-        preds:  [B, S, T]  — model estimates (unordered across speakers)
+    Inputs:
+        targets: Tensor [B, S, T] — ground-truth sources (S speakers)
+        preds:   Tensor [B, S, T] — model estimates (ordered across speakers)
 
     Returns:
-        float: batch-averaged PESQ over PIT-optimal speaker assignment.
+        float: Mean PESQ over speakers and batch (scalar).
+
+    Requirements:
+        - mode="wb" requires fs=16000; mode="nb" requires fs=8000.
+        - Computed on CPU; reference implementations are not CUDA-enabled.
     """
 
-    def __init__(self, *args, target_sr: int = 16000, **kwargs) -> None:
+    def __init__(
+        self,
+        *args,
+        target_sr: int = 16000,
+        mode: str = "wb",
+        **kwargs,
+    ) -> None:
         super().__init__(*args, **kwargs)
         self.target_sr = target_sr
+        self.mode = mode  # "wb" (16 kHz) or "nb" (8 kHz)
 
     @torch.no_grad()
     def __call__(
         self,
-        target: torch.Tensor,  # [B, S, T]
-        preds: torch.Tensor,  # [B, S, T]
-        **kwargs,
+        targets: torch.Tensor,
+        preds: torch.Tensor,
+        **batch,
     ) -> float:
-
-        # Basic shape checks
-        if target.ndim != 3 or preds.ndim != 3:
+        # Shape checks
+        if targets.ndim != 3 or preds.ndim != 3:
             raise ValueError(
-                f"`target` and `preds` must be [B, S, T]. "
-                f"Got target={tuple(target.shape)}, preds={tuple(preds.shape)}"
+                f"`targets` and `preds` must be [B, S, T]. "
+                f"Got targets={tuple(targets.shape)}, preds={tuple(preds.shape)}"
             )
-        if target.shape != preds.shape:
+        if targets.shape != preds.shape:
+            raise ValueError("`targets` and `preds` must match shapes")
+
+        # SR checks
+        if self.mode == "wb" and self.target_sr != 16000:
             raise ValueError(
-                f"`target` and `preds` must have identical shapes. "
-                f"Got target={tuple(target.shape)}, preds={tuple(preds.shape)}"
+                "PESQ 'wb' requires target_sr=16000. Resample or use mode='nb' with 8000 Hz."
+            )
+        if self.mode == "nb" and self.target_sr != 8000:
+            raise ValueError("PESQ 'nb' requires target_sr=8000.")
+
+        B, S, T = targets.shape
+
+        # Move once to CPU and flatten: [B*S, T]
+        targets = targets.detach().to("cpu").float().reshape(B * S, T)
+        preds = preds.detach().to("cpu").float().reshape(B * S, T)
+
+        scores = []
+        for i in range(B * S):
+            scores.append(
+                pesq(
+                    preds[i],
+                    targets[i],
+                    fs=self.target_sr,
+                    mode=self.mode,
+                )
             )
 
-        B, S, T = target.shape
-
-        # Metric function: per-speaker PESQ (wideband) -> [B, S]
-        def metric_fn(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-            return pesq(x, y, fs=self.target_sr, mode="wb")
-
-        # PIT over speakers -> [B]
-        per_sample_scores, _ = pit(
-            preds=preds,
-            target=target,
-            metric_func=metric_fn,
-            mode="speaker-wise",
-            eval_func="max",
-        )  # [B]
-
-        # Batch-average
-        return per_sample_scores.mean().item()
+        return float(torch.tensor(scores).mean().item())

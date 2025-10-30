@@ -1,5 +1,8 @@
 from datetime import datetime
 
+import io
+import imageio.v3 as iio
+
 import numpy as np
 import pandas as pd
 
@@ -197,6 +200,32 @@ class CometMLWriter:
             step=self.step,
         )
 
+    def _video_to_gif_bytes(self, video: np.ndarray, fps: int = 25) -> io.BytesIO:
+        """Codes [F, H, W] into gif"""
+        assert video.ndim == 3, f"Mouth must be [T,H,W]; got {video.shape}"
+        buf = io.BytesIO()
+        iio.imwrite(buf, video, format="GIF", duration=1.0 / fps)
+        buf.seek(0)
+        return buf
+
+    def add_video(self, video_name, video, fps=25):
+        """
+        Log video to the experiment tracker.
+
+        Args:
+            video_name (str): name of the video to use in the tracker.
+            video (torch.Tensor): [T,H,W], значения float/uint8.
+        """
+        video = video.detach().cpu().numpy()
+        gif_buf = self._video_to_gif_bytes(video, fps=fps)
+
+        self.exp.log_video(
+            file=gif_buf,
+            name=self._object_name(video_name) + ".gif",
+            step=self.step,
+            format="gif",
+        )
+
     def add_text(self, text_name, text):
         """
         Log text to the experiment tracker.
@@ -247,12 +276,3 @@ class CometMLWriter:
             tabular_data=table,
             headers=True,
         )
-
-    def add_images(self, image_names, images):
-        raise NotImplementedError()
-
-    def add_pr_curve(self, curve_name, curve):
-        raise NotImplementedError()
-
-    def add_embedding(self, embedding_name, embedding):
-        raise NotImplementedError()

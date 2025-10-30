@@ -1,101 +1,146 @@
 import logging
 import random
-from typing import List
+from typing import List, Dict, Any, Optional
 
 import torch
+import torchaudio
 from torch.utils.data import Dataset
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
 
 class BaseDataset(Dataset):
     """
-    Base class for the datasets.
+    Base class for audio(-visual) datasets.
 
-    Given a proper index (list[dict]), allows to process different datasets
-    for the same task in the identical manner. Therefore, to work with
-    several datasets, the user only have to define index in a nested class.
+    Works with a prebuilt index (list of dicts) and provides common loading
+    utilities. Concrete datasets are expected to prepare the index with all
+    required metadata (paths, ids, etc.).
     """
 
     def __init__(
-        self, index, limit=None, shuffle_index=False, instance_transforms=None
+        self,
+        index: List[Dict[str, Any]],
+        target_sr: int = 16000,
+        limit: Optional[int] = None,
+        shuffle_index: bool = False,
+        instance_transforms: Optional[Dict[str, Any]] = None,
     ):
         """
-        Args:
-            index (list[dict]): list, containing dict for each element of
-                the dataset. The dict has required metadata information,
-                such as label and object path.
-            limit (int | None): if not None, limit the total number of elements
-                in the dataset to 'limit' elements.
-            shuffle_index (bool): if True, shuffle the index. Uses python
-                random package with seed 42.
-            instance_transforms (dict[Callable] | None): transforms that
-                should be applied on the instance. Depend on the
-                tensor name.
-        """
-        self._assert_index_is_valid(index)
+        Initialize dataset with an index and optional sampling parameters.
 
+        Args:
+            index: List of sample dictionaries with required fields (e.g.
+                'mix_path', 's1_path', 's2_path', 'mouth1_path', 'mouth2_path').
+            target_sr: Target sampling rate for all loaded audio.
+            limit: If provided, truncate the index to the first `limit` items
+                (after optional shuffling).
+            shuffle_index: Shuffle index with a fixed seed (42) before limiting.
+            instance_transforms: Optional dict of callables to transform
+                instance tensors keyed by their names.
+        """
+        self.target_sr = target_sr
         index = self._shuffle_and_limit_index(index, limit, shuffle_index)
         self._index: List[dict] = index
-
         self.instance_transforms = instance_transforms
 
-    def __getitem__(self, ind):
+    def __getitem__(self, ind: int) -> Dict[str, Any]:
         """
-        Get element from the index, preprocess it, and combine it
-        into a dict.
+        Load a single instance by index and return a dictionary.
 
-        Notice that the choice of key names is defined by the template user.
-        However, they should be consistent across dataset getitem, collate_fn,
-        loss_function forward method, and model forward method.
+        Returned keys:
+            - 'utt': str, utterance id.
+            - 'mix': torch.FloatTensor [1, T], mono waveform at `target_sr`.
+            - 'target1': Optional[torch.FloatTensor] [1, T] or None (test split).
+            - 'target2': Optional[torch.FloatTensor] [1, T] or None (test split).
+            - 'mouth1': torch.FloatTensor [T_m, D] (e.g., D=1).
+            - 'mouth2': torch.FloatTensor [T_m, D].
 
-        Args:
-            ind (int): index in the self.index list.
-        Returns:
-            instance_data (dict): dict, containing instance
-                (a single dataset element).
+        Note:
+            In test split `target1`/`target2` may be None by design.
         """
         data_dict = self._index[ind]
-        data_path = data_dict["path"]
-        data_object = self.load_object(data_path)
-        data_label = data_dict["label"]
 
-        instance_data = {"data_object": data_object, "labels": data_label}
+        mix = self.load_audio(data_dict["mix_path"])
+        target1 = self.load_audio(data_dict["s1_path"])
+        target2 = self.load_audio(data_dict["s2_path"])
+
+        mouth1 = self.load_mouth(data_dict["mouth1_path"])
+        mouth2 = self.load_mouth(data_dict["mouth2_path"])
+
+        instance_data = {
+            "utt": data_dict["utt"],
+            "mix": mix,  # [T]
+            "target1": target1,  # [T]
+            "target2": target2,  # [T]
+            "mouth1": mouth1,  # [T, D]
+            "mouth2": mouth2,  # [T, D]
+        }
         instance_data = self.preprocess_data(instance_data)
-
         return instance_data
 
-    def __len__(self):
-        """
-        Get length of the dataset (length of the index).
-        """
+    def __len__(self) -> int:
+        """Return the number of indexed samples."""
         return len(self._index)
 
-    def load_object(self, path):
+    def load_audio(self, path: Optional[str]) -> Optional[torch.Tensor]:
         """
-        Load object from disk.
+        Load audio from `path`, convert to mono [1, T] and resample if needed.
 
         Args:
-            path (str): path to the object.
+            path: Path to .wav file. If None, returns None.
+
         Returns:
-            data_object (Tensor):
+            Tensor of shape [1, T] (float32) at `target_sr`, or None if `path` is None.
         """
-        data_object = torch.load(path)
-        return data_object
+        if path is None:
+            return None
+        audio_tensor, sr = torchaudio.load(path)  # [C, T]
+        audio_tensor = audio_tensor.mean(dim=0)  # [T]
+        if sr != self.target_sr:
+            audio_tensor = torchaudio.functional.resample(
+                audio_tensor, sr, self.target_sr
+            )
+        return audio_tensor
 
-    def preprocess_data(self, instance_data):
+    def load_mouth(self, path: Optional[str]) -> Optional[torch.Tensor]:
         """
-        Preprocess data with instance transforms.
+        Load mouth features from .npz.
 
-        Each tensor in a dict undergoes its own transform defined by the key.
+        The first array inside the archive is taken. If 1D, it is expanded to
+        shape [T, 1].
 
         Args:
-            instance_data (dict): dict, containing instance
-                (a single dataset element).
+            path: Path to .npz file. If None, returns None.
+
         Returns:
-            instance_data (dict): dict, containing instance
-                (a single dataset element) (possibly transformed via
-                instance transform).
+            Tensor of shape [T, D] (float32), or None if `path` is None.
+
+        Raises:
+            RuntimeError: If the .npz has no arrays inside.
+        """
+        if path is None:
+            return None
+        d = np.load(path)
+        if len(d.files) == 0:
+            raise RuntimeError(f"No arrays inside {path}")
+        arr = d[d.files[0]]
+        arr = np.asarray(arr, dtype=np.float32)
+        if arr.ndim == 1:
+            arr = arr[:, None]
+        return torch.from_numpy(arr).float()
+
+    def preprocess_data(self, instance_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Apply per-key transforms from `instance_transforms` to the instance.
+
+        Args:
+            instance_data: Dict with tensors produced by `__getitem__`.
+
+        Returns:
+            Possibly transformed `instance_data`.
         """
         if self.instance_transforms is not None:
             for transform_name in self.instance_transforms.keys():
@@ -105,85 +150,40 @@ class BaseDataset(Dataset):
         return instance_data
 
     @staticmethod
-    def _filter_records_from_dataset(
-        index: list,
-    ) -> list:
+    def _filter_records_from_dataset(index: list) -> list:
         """
-        Filter some of the elements from the dataset depending on
-        some condition.
+        Optional hook to filter index items by custom condition.
 
-        This is not used in the example. The method should be called in
-        the __init__ before shuffling and limiting.
-
-        Args:
-            index (list[dict]): list, containing dict for each element of
-                the dataset. The dict has required metadata information,
-                such as label and object path.
-        Returns:
-            index (list[dict]): list, containing dict for each element of
-                the dataset that satisfied the condition. The dict has
-                required metadata information, such as label and object path.
+        Call from subclass __init__ before shuffling/limiting.
         """
         # Filter logic
         pass
 
     @staticmethod
-    def _assert_index_is_valid(index):
-        """
-        Check the structure of the index and ensure it satisfies the desired
-        conditions.
-
-        Args:
-            index (list[dict]): list, containing dict for each element of
-                the dataset. The dict has required metadata information,
-                such as label and object path.
-        """
-        for entry in index:
-            assert "path" in entry, (
-                "Each dataset item should include field 'path'" " - path to audio file."
-            )
-            assert "label" in entry, (
-                "Each dataset item should include field 'label'"
-                " - object ground-truth label."
-            )
-
-    @staticmethod
     def _sort_index(index):
         """
-        Sort index via some rules.
+        Optional hook to sort the index by custom rules.
 
-        This is not used in the example. The method should be called in
-        the __init__ before shuffling and limiting and after filtering.
-
-        Args:
-            index (list[dict]): list, containing dict for each element of
-                the dataset. The dict has required metadata information,
-                such as label and object path.
-        Returns:
-            index (list[dict]): sorted list, containing dict for each element
-                of the dataset. The dict has required metadata information,
-                such as label and object path.
+        Call from subclass __init__ before shuffling/limiting and after filtering.
         """
         return sorted(index, key=lambda x: x["KEY_FOR_SORTING"])
 
     @staticmethod
     def _shuffle_and_limit_index(index, limit, shuffle_index):
         """
-        Shuffle elements in index and limit the total number of elements.
+        Optionally shuffle index (seed=42) and truncate to `limit` items.
 
         Args:
-            index (list[dict]): list, containing dict for each element of
-                the dataset. The dict has required metadata information,
-                such as label and object path.
-            limit (int | None): if not None, limit the total number of elements
-                in the dataset to 'limit' elements.
-            shuffle_index (bool): if True, shuffle the index. Uses python
-                random package with seed 42.
+            index: List of sample dicts.
+            limit: Optional max length after shuffling.
+            shuffle_index: Whether to shuffle deterministically.
+
+        Returns:
+            New list after shuffling/limiting.
         """
         if shuffle_index:
             random.seed(42)
             random.shuffle(index)
-
         if limit is not None:
             index = index[:limit]
         return index
