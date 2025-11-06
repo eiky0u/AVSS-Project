@@ -142,11 +142,8 @@ class BaseDataset(Dataset):
         Returns:
             Possibly transformed `instance_data`.
         """
-        if self.instance_transforms is not None:
-            for transform_name in self.instance_transforms.keys():
-                instance_data[transform_name] = self.instance_transforms[
-                    transform_name
-                ](instance_data[transform_name])
+        instance_data['mouth1'] = ((instance_data['mouth1'] / 256) * 2) - 1
+        instance_data['mouth2'] = ((instance_data['mouth2'] / 256) * 2) - 1
         return instance_data
 
     @staticmethod
