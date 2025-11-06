@@ -1,0 +1,10 @@
+train:
+  _target_: src.datasets.AudioVisualDataset
+  split: "train"
+  limit: 2
+  instance_transforms: ${transforms.instance_transforms.train}
+val:
+  _target_: src.datasets.AudioVisualDataset
+  split: "train"
+  limit: 2
+  instance_transforms: ${transforms.instance_transforms.inference}

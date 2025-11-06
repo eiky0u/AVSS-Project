@@ -72,8 +72,45 @@ class Trainer(BaseTrainer):
 
         # logging scheme might be different for different partitions
         if mode == "train":  # the method is called only every self.log_step steps
-            # Log Stuff
-            pass
+            self.log_audio(**batch)
+            self.log_mouth(**batch)
         else:
-            # Log Stuff
-            pass
+            self.log_audio(**batch)
+            self.log_mouth(**batch)
+            self.log_prediction(**batch)
+
+    def log_audio(
+        self,
+        mix,
+        mix_len,
+        targets,
+        **batch,
+    ):
+        sr = 16000
+        T = int(mix_len[0])
+        self.writer.add_audio(f"mix", mix[0, :, :T], sr)
+        self.writer.add_audio(f"s1", targets[0, 0, :T], sr)
+        self.writer.add_audio(f"s2", targets[0, 1, :T], sr)
+
+    def log_mouth(
+        self,
+        mouths,
+        mouths_len,
+        **batch,
+    ):
+        FPS = 25
+        F = int(mouths_len[0])
+        self.writer.add_video(f"mouth1", mouths[0, 0, :F, :, :], fps=FPS)
+        self.writer.add_video(f"mouth2", mouths[0, 1, :F, :, :], fps=FPS)
+
+    def log_prediction(
+        self,
+        mix,
+        mix_len,
+        **batch,
+    ):
+        sr = 16000
+        T = int(mix_len[0])
+        preds = self.model(mix)["preds"]
+        self.writer.add_audio(f"pred_s1", preds[0, 0, :T], sr)
+        self.writer.add_audio(f"pred_s2", preds[0, 1, :T], sr)
