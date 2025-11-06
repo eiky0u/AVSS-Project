@@ -57,7 +57,7 @@ def collate_fn(items: List[Dict[str, Any]]) -> Dict[str, Any]:
     targets = torch.stack([t1, t2], dim=1)  # [B, 2, T_max]
     batch["targets"] = targets
 
-    # -------- MOUTHS [T, H, W] --------
+    # -------- MOUTHS --------
     m1_list = [x["mouth1"] for x in items]  # [F, H, W]
     m2_list = [x["mouth2"] for x in items]
     assert all(m.dim() == 3 for m in m1_list + m2_list), "mouths must be [F, H, W]"
