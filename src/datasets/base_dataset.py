@@ -75,8 +75,8 @@ class BaseDataset(Dataset):
             "mix": mix,  # [T]
             "target1": target1,  # [T]
             "target2": target2,  # [T]
-            "mouth1": mouth1,  # [T, D]
-            "mouth2": mouth2,  # [T, D]
+            "mouth1": mouth1,  # [F, H, W]
+            "mouth2": mouth2,  # [F, H, W]
         }
         instance_data = self.preprocess_data(instance_data)
         return instance_data
@@ -133,17 +133,10 @@ class BaseDataset(Dataset):
         return torch.from_numpy(arr).float()
 
     def preprocess_data(self, instance_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Apply per-key transforms from `instance_transforms` to the instance.
-
-        Args:
-            instance_data: Dict with tensors produced by `__getitem__`.
-
-        Returns:
-            Possibly transformed `instance_data`.
-        """
-        instance_data['mouth1'] = ((instance_data['mouth1'] / 256) * 2) - 1
-        instance_data['mouth2'] = ((instance_data['mouth2'] / 256) * 2) - 1
+        if self.instance_transforms is not None:
+            for k, transform in self.instance_transforms.items():
+                if k in instance_data:
+                    instance_data[k] = transform(instance_data[k])
         return instance_data
 
     @staticmethod

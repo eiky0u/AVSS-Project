@@ -2,5 +2,13 @@ batch_transforms:
   train: null
   inference: null
 instance_transforms:
-  train: null
-  inference: null
+  train:
+    mouth1:
+      _target_: src.transforms.NormalizeMouth
+    mouth2:
+      _target_: src.transforms.NormalizeMouth
+  inference:
+    mouth1:
+      _target_: src.transforms.NormalizeMouth
+    mouth2:
+      _target_: src.transforms.NormalizeMouth

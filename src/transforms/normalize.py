@@ -2,29 +2,20 @@ import torch
 from torch import nn
 
 
-class Normalize1D(nn.Module):
+class NormalizeMouth(nn.Module):
     """
-    Batch-version of Normalize for 1D Input.
-    Used as an example of a batch transform.
+    Normalizes pixel values of the mouth region tensor
+    from the [0, 255] range to [0.0, 1.0].
+
+    Args:
+        mouth (torch.Tensor): Input tensor containing mouth images,
+            expected in the [0, 255] range (uint8 or float).
+            Shape: (F, H, W).
+
+    Returns:
+        torch.Tensor: Normalized tensor of type float32
+            with values in the [0.0, 1.0] range.
     """
 
-    def __init__(self, mean, std):
-        """
-        Args:
-            mean (float): mean used in the normalization.
-            std (float): std used in the normalization.
-        """
-        super().__init__()
-
-        self.mean = mean
-        self.std = std
-
-    def forward(self, x):
-        """
-        Args:
-            x (Tensor): input tensor.
-        Returns:
-            x (Tensor): normalized tensor.
-        """
-        x = (x - self.mean) / self.std
-        return x
+    def forward(self, mouth: torch.Tensor) -> torch.Tensor:
+        return mouth.float() / 255.0
