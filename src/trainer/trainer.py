@@ -107,10 +107,11 @@ class Trainer(BaseTrainer):
         self,
         mix,
         mix_len,
+        mouths,
         **batch,
     ):
         sr = 16000
         T = int(mix_len[0])
-        preds = self.model(mix)["preds"]
+        preds = self.model(mix=mix, mouths=mouths)["preds"]
         self.writer.add_audio(f"pred_s1", preds[0, 0, :T], sr)
         self.writer.add_audio(f"pred_s2", preds[0, 1, :T], sr)

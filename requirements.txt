@@ -17,6 +17,7 @@ pandas
 wandb
 comet_ml
 hydra-core
+gdown
 
 black
 isort

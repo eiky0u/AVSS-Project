@@ -1,5 +1,5 @@
 defaults:
-  - model: baseline
+  - model: tdfnet
   - writer: cometml
   - metrics: baseline
   - datasets: onebatchtest
@@ -28,3 +28,4 @@ trainer:
   early_stop: ${trainer.n_epochs} # epochs for early stopping
   save_dir: "saved"
   seed: 1
+lipreader_cfg: ${hydra:runtime.cwd}/src/lipreading_pretrained/config/lrw_resnet18_dctcn.json

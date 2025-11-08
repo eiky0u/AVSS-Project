@@ -64,7 +64,7 @@ def collate_fn(items: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     mouth1 = pad_sequence(m1_list, batch_first=True)  # [B, F_max, H, W]
     mouth2 = pad_sequence(m2_list, batch_first=True)  # [B, F_max, H, W]
-    batch["mouths"] = torch.stack([mouth1, mouth2], dim=1)
+    batch["mouths"] = torch.stack([mouth1, mouth2], dim=1)  # [B, S, F_max, H, W]
     batch["mouths_len"] = torch.as_tensor(
         [m.size(0) for m in m1_list], dtype=torch.long, device=mouth1.device
     )
