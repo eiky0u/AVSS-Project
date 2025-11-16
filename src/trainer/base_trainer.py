@@ -30,6 +30,10 @@ class BaseTrainer:
         epoch_len=None,
         skip_oom=True,
         batch_transforms=None,
+        amp=False,
+        scaler=None,
+        amp_dtype=torch.float16,
+        accum=1,
     ):
         """
         Args:
@@ -54,6 +58,10 @@ class BaseTrainer:
             batch_transforms (dict[Callable] | None): transforms that
                 should be applied on the whole batch. Depend on the
                 tensor name.
+            amp (bool): enable mixed precision via torch.autocast.
+            scaler (torch.cuda.amp.GradScaler | None): loss scaler when amp=True.
+            amp_dtype (torch.dtype): target dtype for autocast (float16 or bfloat16).
+            accum (int): number of steps for gradient accumulation.
         """
         self.is_train = True
 
@@ -70,7 +78,15 @@ class BaseTrainer:
         self.criterion = criterion
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
-        self.batch_transforms = batch_transforms
+        self.batch_transforms = batch_transforms or {}
+
+        self.amp = bool(amp) and str(self.device).startswith("cuda")
+        self.scaler = scaler
+        self.amp_dtype = amp_dtype
+        self.accum = int(accum)
+
+        # last value of (post-clip) gradient norm for logging
+        self._last_logged_clipped_norm = 0.0
 
         # define dataloaders
         self.train_dataloader = dataloaders["train"]
@@ -92,13 +108,8 @@ class BaseTrainer:
         self.epochs = self.cfg_trainer.n_epochs
 
         # configuration to monitor model performance and save best
-
-        self.save_period = (
-            self.cfg_trainer.save_period
-        )  # checkpoint each save_period epochs
-        self.monitor = self.cfg_trainer.get(
-            "monitor", "off"
-        )  # format: "mnt_mode mnt_metric"
+        self.save_period = self.cfg_trainer.save_period
+        self.monitor = self.cfg_trainer.get("monitor", "off")
 
         if self.monitor == "off":
             self.mnt_mode = "off"
@@ -130,7 +141,6 @@ class BaseTrainer:
         )
 
         # define checkpoint dir and init everything if required
-
         self.checkpoint_dir = (
             ROOT_PATH / config.trainer.save_dir / config.writer.run_name
         )
@@ -202,23 +212,25 @@ class BaseTrainer:
         self.train_metrics.reset()
         self.writer.set_step((epoch - 1) * self.epoch_len)
         self.writer.add_scalar("epoch", epoch)
+
+        last_train_metrics = {}
+
         for batch_idx, batch in enumerate(
             tqdm(self.train_dataloader, desc="train", total=self.epoch_len)
         ):
             try:
-                batch = self.process_batch(
-                    batch,
-                    metrics=self.train_metrics,
-                )
+                batch = self.process_batch(batch, metrics=self.train_metrics)
             except torch.cuda.OutOfMemoryError as e:
                 if self.skip_oom:
                     self.logger.warning("OOM on batch. Skipping batch.")
-                    torch.cuda.empty_cache()  # free some memory
+                    torch.cuda.empty_cache()
                     continue
                 else:
                     raise e
 
-            self.train_metrics.update("grad_norm", self._get_grad_norm())
+            # grad_norm is updated in Trainer when we actually do optimizer.step()
+            gn = float(getattr(self, "_last_logged_clipped_norm", 0.0))
+            self.train_metrics.update("grad_norm", gn)
 
             # log current results
             if batch_idx % self.log_step == 0:
@@ -228,17 +240,23 @@ class BaseTrainer:
                         epoch, self._progress(batch_idx), batch["loss"].item()
                     )
                 )
-                self.writer.add_scalar(
-                    "learning rate", self.lr_scheduler.get_last_lr()[0]
-                )
+                if self.lr_scheduler is not None:
+                    lr = self.lr_scheduler.get_last_lr()[0]
+                else:
+                    lr = self.optimizer.param_groups[0]["lr"]
+                self.writer.add_scalar("learning rate", lr)
                 self._log_scalars(self.train_metrics)
                 self._log_batch(batch_idx, batch)
                 # we don't want to reset train metrics at the start of every epoch
                 # because we are interested in recent train metrics
                 last_train_metrics = self.train_metrics.result()
                 self.train_metrics.reset()
+
             if batch_idx + 1 >= self.epoch_len:
                 break
+
+        if not last_train_metrics:
+            last_train_metrics = self.train_metrics.result()
 
         logs = last_train_metrics
 
@@ -255,7 +273,7 @@ class BaseTrainer:
 
         Args:
             epoch (int): current training epoch.
-            part (str): partition to evaluate on
+            part (str): partition to evaluate on.
             dataloader (DataLoader): dataloader for the partition.
         Returns:
             logs (dict): logs that contain the information about evaluation.
@@ -269,15 +287,11 @@ class BaseTrainer:
                 desc=part,
                 total=len(dataloader),
             ):
-                batch = self.process_batch(
-                    batch,
-                    metrics=self.evaluation_metrics,
-                )
+                batch = self.process_batch(batch, metrics=self.evaluation_metrics)
             self.writer.set_step(epoch * self.epoch_len, part)
             self._log_scalars(self.evaluation_metrics)
-            self._log_batch(
-                batch_idx, batch, part
-            )  # log only the last batch during inference
+            # log only the last batch during inference
+            self._log_batch(batch_idx, batch, part)
 
         return self.evaluation_metrics.result()
 
@@ -302,8 +316,6 @@ class BaseTrainer:
         stop_process = False
         if self.mnt_mode != "off":
             try:
-                # check whether model performance improved or not,
-                # according to specified metric(mnt_metric)
                 if self.mnt_mode == "min":
                     improved = logs[self.mnt_metric] <= self.mnt_best
                 elif self.mnt_mode == "max":
@@ -363,7 +375,6 @@ class BaseTrainer:
             batch (dict): dict-based batch containing the data from
                 the dataloader (possibly transformed via batch transform).
         """
-        # do batch transforms on device
         transform_type = "train" if self.is_train else "inference"
         transforms = self.batch_transforms.get(transform_type)
         if transforms is not None:
@@ -373,35 +384,78 @@ class BaseTrainer:
                 )
         return batch
 
-    def _clip_grad_norm(self):
+    def _params_with_grad(self):
         """
-        Clips the gradient norm by the value defined in
-        config.trainer.max_grad_norm
+        Collect parameters with gradients from optimizer groups.
+
+        Returns:
+            params (list[torch.nn.Parameter]): parameters that have .grad.
         """
-        if self.config["trainer"].get("max_grad_norm", None) is not None:
-            clip_grad_norm_(
-                self.model.parameters(), self.config["trainer"]["max_grad_norm"]
-            )
+        return [
+            p
+            for group in self.optimizer.param_groups
+            for p in group["params"]
+            if p.grad is not None
+        ]
 
     @torch.no_grad()
-    def _get_grad_norm(self, norm_type=2):
+    def _grad_norm(self, params=None, norm_type: float = 2.0):
         """
-        Calculates the gradient norm for logging.
+        Calculates the gradient norm.
 
         Args:
-            norm_type (float | str | None): the order of the norm.
+            params (list[torch.nn.Parameter] | None): parameters to use. If None,
+                use parameters with gradients from the optimizer.
+            norm_type (float): the order of the norm.
         Returns:
             total_norm (float): the calculated norm.
         """
-        parameters = self.model.parameters()
-        if isinstance(parameters, torch.Tensor):
-            parameters = [parameters]
-        parameters = [p for p in parameters if p.grad is not None]
-        total_norm = torch.norm(
-            torch.stack([torch.norm(p.grad.detach(), norm_type) for p in parameters]),
-            norm_type,
-        )
-        return total_norm.item()
+        params = self._params_with_grad() if params is None else params
+        if not params:
+            return 0.0
+
+        norms = []
+        for p in params:
+            g = p.grad
+            if g.is_sparse:
+                g = g.coalesce().values()
+            norms.append(g.detach().float().norm(norm_type))
+
+        if not norms:
+            return 0.0
+
+        total = torch.norm(torch.stack(norms), norm_type)
+        return float(total)
+
+    @torch.no_grad()
+    def _clip_grad_norm(self, max_norm=None, norm_type: float = 2.0):
+        """
+        Clips gradients by the value defined in config.trainer.max_grad_norm
+        and returns both pre-clip and post-clip gradient norms.
+
+        This method does not handle AMP unscale; gradients are expected to be
+        already unscaled (if AMP is used).
+
+        Args:
+            max_norm (float | None): max norm to clip by. If None, will be
+                taken from config.trainer.max_grad_norm.
+            norm_type (float): the order of the norm.
+        Returns:
+            pre_norm (float): gradient norm before clipping.
+            post_norm (float): gradient norm after clipping.
+        """
+        params = self._params_with_grad()
+        if not params:
+            return 0.0, 0.0
+
+        pre = self._grad_norm(params, norm_type)
+        max_norm = self.config["trainer"].get("max_grad_norm", max_norm)
+        if not max_norm:
+            return pre, pre
+
+        clip_grad_norm_(params, max_norm, norm_type=norm_type)
+        post = self._grad_norm(params, norm_type)
+        return pre, post
 
     def _progress(self, batch_idx):
         """
@@ -457,10 +511,9 @@ class BaseTrainer:
 
         Args:
             epoch (int): current epoch number.
-            save_best (bool): if True, rename the saved checkpoint to 'model_best.pth'.
+            save_best (bool): if True, also save checkpoint as 'model_best.pth'.
             only_best (bool): if True and the checkpoint is the best, save it only as
-                'model_best.pth'(do not duplicate the checkpoint as
-                checkpoint-epochEpochNumber.pth)
+                'model_best.pth' (do not duplicate as checkpoint-epochEpochNumber.pth).
         """
         arch = type(self.model).__name__
         state = {
@@ -468,16 +521,22 @@ class BaseTrainer:
             "epoch": epoch,
             "state_dict": self.model.state_dict(),
             "optimizer": self.optimizer.state_dict(),
-            "lr_scheduler": self.lr_scheduler.state_dict(),
+            "lr_scheduler": (
+                self.lr_scheduler.state_dict() if self.lr_scheduler else None
+            ),
             "monitor_best": self.mnt_best,
             "config": self.config,
         }
+        if self.amp and self.scaler is not None:
+            state["scaler"] = self.scaler.state_dict()
+
         filename = str(self.checkpoint_dir / f"checkpoint-epoch{epoch}.pth")
         if not (only_best and save_best):
             torch.save(state, filename)
             if self.config.writer.log_checkpoints:
                 self.writer.add_checkpoint(filename, str(self.checkpoint_dir.parent))
             self.logger.info(f"Saving checkpoint: {filename} ...")
+
         if save_best:
             best_path = str(self.checkpoint_dir / "model_best.pth")
             torch.save(state, best_path)
@@ -511,7 +570,7 @@ class BaseTrainer:
             )
         self.model.load_state_dict(checkpoint["state_dict"])
 
-        # load optimizer state from checkpoint only when optimizer type is not changed.
+        # load optimizer and scheduler state from checkpoint only when types are not changed.
         if (
             checkpoint["config"]["optimizer"] != self.config["optimizer"]
             or checkpoint["config"]["lr_scheduler"] != self.config["lr_scheduler"]
@@ -523,7 +582,10 @@ class BaseTrainer:
             )
         else:
             self.optimizer.load_state_dict(checkpoint["optimizer"])
-            self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+            if checkpoint.get("lr_scheduler") is not None and self.lr_scheduler:
+                self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+            if "scaler" in checkpoint and self.scaler is not None:
+                self.scaler.load_state_dict(checkpoint["scaler"])
 
         self.logger.info(
             f"Checkpoint loaded. Resume training from epoch {self.start_epoch}"

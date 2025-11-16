@@ -1,10 +1,8 @@
 train:
   _target_: src.datasets.AudioVisualDataset
   split: "train"
-  limit: 16
   instance_transforms: ${transforms.instance_transforms.train}
 val:
   _target_: src.datasets.AudioVisualDataset
-  split: "train"
-  limit: 16
+  split: "val"
   instance_transforms: ${transforms.instance_transforms.inference}
