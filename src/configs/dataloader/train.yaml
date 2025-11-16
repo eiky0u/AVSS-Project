@@ -3,4 +3,4 @@ batch_size: 8
 num_workers: 6
 prefetch_factor: 2
 pin_memory: True
-persistent_workers: true
+persistent_workers: True

@@ -29,6 +29,7 @@ class AudioVisualDataset(BaseDataset):
         self,
         split: str = "train",
         data_dir=None,
+        index_dir=None,
         *args,
         **kwargs,
     ):
@@ -39,6 +40,8 @@ class AudioVisualDataset(BaseDataset):
             split: One of {"train", "val"}.
             data_dir: Root directory with expected structure. Defaults to
                 `ROOT_PATH / "data"`.
+            index_dir: Directory to store/load index files (`{split}_index.json`).
+                Defaults to `data_dir`. Must be writable in environments like Kaggle.
             *args, **kwargs: Passed through to `BaseDataset`.
         """
         assert split in ["train", "val"]
@@ -49,13 +52,22 @@ class AudioVisualDataset(BaseDataset):
             data_dir = Path(data_dir)
 
         self._data_dir = data_dir
+
+        if index_dir is None:
+            index_dir = data_dir
+        else:
+            index_dir = Path(index_dir)
+
+        index_dir.mkdir(parents=True, exist_ok=True)
+        self._index_dir = index_dir
+
         index = self._get_or_load_index(split)
 
         super().__init__(index, *args, **kwargs)
 
     def _get_or_load_index(self, split):
         """
-        Load index from `<data_dir>/{split}_index.json` or create it if missing.
+        Load index from `<index_dir>/{split}_index.json` or create it if missing.
 
         Args:
             split: Split name ("train", "val", "test").
@@ -63,7 +75,7 @@ class AudioVisualDataset(BaseDataset):
         Returns:
             List of sample dicts ready to be consumed by `BaseDataset`.
         """
-        index_path = self._data_dir / f"{split}_index.json"
+        index_path = self._index_dir / f"{split}_index.json"
         if index_path.exists():
             with index_path.open() as f:
                 index = json.load(f)
