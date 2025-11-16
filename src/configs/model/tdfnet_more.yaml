@@ -1,0 +1,30 @@
+_target_: src.model.TDFNet
+
+# --- required ---
+pretrained_config_path: ${..lipreader_cfg}
+
+# --- general ---
+num_speakers: 2
+target_len: 32000
+num_fusion_blocks: 3          
+num_refinement_blocks: 22     
+
+# --- audio ---
+audio_encoder_dim: 512
+audio_encoder_kernel_size: 21
+audio_encoder_stride: 10
+audio_bottleneck_dim: 512     
+audio_hidden_dim: 512         
+audio_kernel_size: 5
+audio_num_sampling_layers: 5  
+audio_num_rnn: 1
+audio_dropout: 0.1
+
+# --- video ---
+video_encoder_dim: 512        
+video_bottleneck_dim: 64      
+video_hidden_dim: 64          
+video_kernel_size: 3
+video_num_sampling_layers: 4  
+video_num_heads: 8
+video_dropout: 0.1
