@@ -1,10 +1,10 @@
 defaults:
-  - model: tdfnet
+  - model: tdfnet_16
   - writer: cometml
-  - metrics: baseline
+  - metrics: metrics
   - datasets: train
   - dataloader: train
-  - transforms: train
+  - transforms: normalize
   - _self_
 optimizer:
   _target_: torch.optim.AdamW

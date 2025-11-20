@@ -1,13 +1,14 @@
 defaults:
-  - model: baseline
-  - metrics: example
-  - datasets: example_eval # we do not want to run inference on training data
-  - dataloader: example
-  - transforms: example
+  - model: tdfnet_22
+  - metrics: metrics
+  - datasets: inference_val
+  - dataloader: inference_val 
+  - transforms: normalize
   - _self_
 inferencer:
-  device_tensors: ["data_object", "labels"] # which tensors should be on device (ex. GPU)
-  device: auto # device name or "auto"
-  save_path: "example" # any name here, can be a dataset name
+  device_tensors: ["mix", "targets", "mouths"] # which tensors should be on device (ex. GPU)
+  device: cpu # device name or "auto"
+  save_path: "model_outputs" # any path here
   seed: 1
-  from_pretrained: "saved/model_best.pth" # path to the pretrained model
+  from_pretrained: "TDFNet/tdfnet_22.pth" # path to the pretrained model
+lipreader_cfg: ${hydra:runtime.cwd}/src/lipreading_pretrained/config/lrw_resnet18_dctcn.json

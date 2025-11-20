@@ -107,6 +107,9 @@ saved/
 wandb/
 .cometml-runs/
 outputs/
+TDFNet/
+lrw_resnet18_dctcn_video.pth
+model_outputs/
 
 # editor, os cache directory
 .vscode/

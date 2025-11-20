@@ -56,7 +56,6 @@ class Trainer(BaseTrainer):
             if self.amp and self.scaler is not None:
                 self.scaler.scale(batch["loss"] / self.accum).backward()
                 if do_update:
-                    # AMP: сначала unscale_, потом clip, потом step
                     self.scaler.unscale_(self.optimizer)
                     pre, post = self._clip_grad_norm()
                     self._last_logged_clipped_norm = float(post)

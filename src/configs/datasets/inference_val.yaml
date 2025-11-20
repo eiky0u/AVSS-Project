@@ -1,0 +1,4 @@
+val:
+  _target_: src.datasets.AudioVisualDataset
+  split: "val"
+  instance_transforms: ${transforms.instance_transforms.inference}

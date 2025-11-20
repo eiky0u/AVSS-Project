@@ -1,5 +1,6 @@
 import torch
 from tqdm.auto import tqdm
+import torchaudio
 
 from src.metrics.tracker import MetricTracker
 from src.trainer.base_trainer import BaseTrainer
@@ -80,6 +81,8 @@ class Inferencer(BaseTrainer):
             # init model
             self._from_pretrained(config.inferencer.get("from_pretrained"))
 
+        self.sample_rate = 16000
+
     def run_inference(self):
         """
         Run inference on each partition.
@@ -129,26 +132,29 @@ class Inferencer(BaseTrainer):
         # Some saving logic. This is an example
         # Use if you need to save predictions on disk
 
-        batch_size = batch["logits"].shape[0]
-        current_id = batch_idx * batch_size
+        batch_size = batch["preds"].shape[0]
 
         for i in range(batch_size):
             # clone because of
             # https://github.com/pytorch/pytorch/issues/1995
-            logits = batch["logits"][i].clone()
-            label = batch["labels"][i].clone()
-            pred_label = logits.argmax(dim=-1)
 
-            output_id = current_id + i
+            utt = batch["utt"][i]
+            preds = batch["preds"][i].clone().detach().cpu()  # [S, T]
 
-            output = {
-                "pred_label": pred_label,
-                "label": label,
-            }
+            s1 = preds[0, :]
+            s2 = preds[1, :]
 
             if self.save_path is not None:
-                # you can use safetensors or other lib here
-                torch.save(output, self.save_path / part / f"output_{output_id}.pth")
+                torchaudio.save(
+                    str(self.save_path / part / "s1" / f"{utt}.wav"),
+                    s1.unsqueeze(0),
+                    sample_rate=self.sample_rate,
+                )
+                torchaudio.save(
+                    str(self.save_path / part / "s2" / f"{utt}.wav"),
+                    s2.unsqueeze(0),
+                    sample_rate=self.sample_rate,
+                )
 
         return batch
 
@@ -171,6 +177,8 @@ class Inferencer(BaseTrainer):
         # create Save dir
         if self.save_path is not None:
             (self.save_path / part).mkdir(exist_ok=True, parents=True)
+            (self.save_path / part / "s1").mkdir(exist_ok=True, parents=True)
+            (self.save_path / part / "s2").mkdir(exist_ok=True, parents=True)
 
         with torch.no_grad():
             for batch_idx, batch in tqdm(
