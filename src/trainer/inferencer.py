@@ -129,20 +129,16 @@ class Inferencer(BaseTrainer):
             for met in self.metrics["inference"]:
                 metrics.update(met.name, met(**batch))
 
-        # Some saving logic. This is an example
-        # Use if you need to save predictions on disk
+        preds = batch["preds"].clone().detach().cpu()  # [B, S, T]
+        max_val = preds.abs().max()
+        if max_val > 1.0:
+            preds = preds / max_val
 
-        batch_size = batch["preds"].shape[0]
-
+        batch_size = preds.shape[0]
         for i in range(batch_size):
-            # clone because of
-            # https://github.com/pytorch/pytorch/issues/1995
-
             utt = batch["utt"][i]
-            preds = batch["preds"][i].clone().detach().cpu()  # [S, T]
-
-            s1 = preds[0, :]
-            s2 = preds[1, :]
+            s1 = preds[i, 0, :]  # [S, T]
+            s2 = preds[i, 1, :]  # [S, T]
 
             if self.save_path is not None:
                 torchaudio.save(
