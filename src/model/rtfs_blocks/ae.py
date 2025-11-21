@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from src.model.modules.GLN import GlobalLayerNorm
+from src.model.rtfs_blocks.GLN import GlobalLayerNorm
 
 class audio_encoder(nn.Module):
     def __init__(self, n_fft=1024, hop_length=128, win_length=256, av_channels=256):

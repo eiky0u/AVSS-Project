@@ -2,12 +2,12 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from src.model.modules.ae import audio_encoder
-from src.model.modules.VP import VPBlock
-from src.model.modules.RTFS import APBlock, StackedRTFS
-from src.model.modules.fusion import CAF
-from src.model.modules.s3 import SpectralSourceSeparation
-from src.model.modules.decoder import Decoder
+from src.model.rtfs_blocks.ae import audio_encoder
+from src.model.rtfs_blocks.VP import VPBlock
+from src.model.rtfs_blocks.RTFS import APBlock, StackedRTFS
+from src.model.rtfs_blocks.fusion import CAF
+from src.model.rtfs_blocks.s3 import SpectralSourceSeparation
+from src.model.rtfs_blocks.decoder import Decoder
 
 
 class Model(nn.Module):

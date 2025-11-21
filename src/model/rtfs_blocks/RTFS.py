@@ -2,7 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from src.model.modules.GLN import GlobalLayerNorm
+from src.model.rtfs_blocks.GLN import GlobalLayerNorm
 
 
 class LayerNormChannels(nn.Module):
