@@ -1,13 +1,13 @@
 defaults:
   - model: tdfnet_22
   - metrics: metrics
-  - datasets: inference_val
-  - dataloader: inference_val 
+  - datasets: custom_dataset
+  - dataloader: inference
   - transforms: normalize
   - _self_
 inferencer:
   device_tensors: ["mix", "targets", "mouths"] # which tensors should be on device (ex. GPU)
-  device: cpu # device name or "auto"
+  device: auto # device name or "auto"
   save_path: "model_outputs" # any path here
   seed: 1
   from_pretrained: "TDFNet/tdfnet_22.pth" # path to the pretrained model

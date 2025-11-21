@@ -21,7 +21,6 @@ class AudioVisualDataset(BaseDataset):
           mouths/*.npz
 
     Notes:
-        - For test split, 's1_path' and 's2_path' may be absent (None).
         - Mouth features are assumed to exist for both speakers.
     """
 
@@ -70,7 +69,7 @@ class AudioVisualDataset(BaseDataset):
         Load index from `<index_dir>/{split}_index.json` or create it if missing.
 
         Args:
-            split: Split name ("train", "val", "test").
+            split: Split name ("train", "val").
 
         Returns:
             List of sample dicts ready to be consumed by `BaseDataset`.
@@ -93,22 +92,18 @@ class AudioVisualDataset(BaseDataset):
         Speaker ids are used to locate mouth features '<spk>.npz'.
 
         Args:
-            split: Split name ("train", "val", "test").
+            split: Split name ("train", "val").
 
         Returns:
             List of dictionaries with keys:
                 'utt', 'mix_path', 's1_path', 's2_path',
                 'mouth1_path', 'mouth2_path'.
-            For test split, 's1_path'/'s2_path' may be None.
         """
         split = str(split)
         mix_dir = self._data_dir / "audio" / split / "mix"
         s1_dir = self._data_dir / "audio" / split / "s1"
         s2_dir = self._data_dir / "audio" / split / "s2"
         mouths_dir = self._data_dir / "mouths"
-
-        if not mix_dir.exists():
-            raise FileNotFoundError(f"Mix dir not found: {mix_dir}")
 
         mix_files = sorted(mix_dir.glob("*.wav"))
         index = []
@@ -129,8 +124,8 @@ class AudioVisualDataset(BaseDataset):
                 "mix_path": str(mix_path),
                 "mouth1_path": str(mouth_1_path),
                 "mouth2_path": str(mouth_2_path),
-                "s1_path": str(s1_path) if s1_path.exists() else None,
-                "s2_path": str(s2_path) if s2_path.exists() else None,
+                "s1_path": str(s1_path),
+                "s2_path": str(s2_path),
             }
             index.append(item)
 
