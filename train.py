@@ -37,13 +37,22 @@ def main(config):
     dataloaders, batch_transforms = get_dataloaders(config, device)
 
     # build model architecture, then print to console
+    
     model = instantiate(config.model).to(device)
-    logger.info(model)
 
+    if config.model == 'rtfsnet':
+        from src.model.rtfs_blocks.ve import video_encoder 
+        ve = video_encoder(pretrained=True, freeze=True)
+        model_type = 'rtfsnet'
+    elif 'tdfnet' in config.model:
+        ve = None
+        model_type = 'tdfnet'
+
+    logger.info(model)
+    
     # get loss and metrics
     loss_function = instantiate(config.loss_function).to(device)
     metrics = instantiate(config.metrics)
-
     # build optimizer, learning rate scheduler
     trainable_params = filter(lambda p: p.requires_grad, model.parameters())
     optimizer = instantiate(config.optimizer, params=trainable_params)
@@ -80,6 +89,8 @@ def main(config):
         config=config,
         device=device,
         dataloaders=dataloaders,
+        ve=ve,
+        model_type=model_type,
         epoch_len=epoch_len,
         logger=logger,
         writer=writer,

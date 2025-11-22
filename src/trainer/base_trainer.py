@@ -27,6 +27,8 @@ class BaseTrainer:
         dataloaders,
         logger,
         writer,
+        model_type='tdfnet',
+        ve=None,
         epoch_len=None,
         skip_oom=True,
         batch_transforms=None,
@@ -64,10 +66,10 @@ class BaseTrainer:
             accum (int): number of steps for gradient accumulation.
         """
         self.is_train = True
-
+        self.model_type = model_type
         self.config = config
         self.cfg_trainer = self.config.trainer
-
+        self.ve = ve
         self.device = device
         self.skip_oom = skip_oom
 

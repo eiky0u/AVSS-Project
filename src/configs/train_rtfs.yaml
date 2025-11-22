@@ -1,0 +1,42 @@
+defaults:
+  - model: rtfsnet
+  - writer: cometml
+  - metrics: metrics
+  - datasets: train
+  - dataloader: train
+  - transforms: normalize
+  - _self_
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 1e-3           
+  betas: [0.9, 0.999]
+  eps: 1e-8
+  weight_decay: 0.1
+lr_scheduler:
+  _target_: torch.optim.lr_scheduler.OneCycleLR
+  max_lr: 1e-3          
+  pct_start: 0.1         
+  anneal_strategy: cos     
+  div_factor: 10.0         
+  final_div_factor: 100.0  
+  epochs: ${trainer.n_epochs}
+  three_phase: false
+loss_function:
+  _target_: src.loss.SISNRLoss
+trainer:
+  log_step: 16
+  n_epochs: 50
+  device_tensors: ["mix", "targets", "mouths"] # which tensors should be on device (ex. GPU)
+  resume_from: null # null or path to the checkpoint dir with *.pth and config.yaml
+  device: cuda # device name or "auto"
+  override: True # if True, will override the previous run with the same name
+  monitor: "max val_SI-SNRi" # "off" or "max/min metric_name", i.e. our goal is to maximize/minimize metric
+  save_period: 5 # checkpoint each save_period epochs in addition to the best epoch
+  early_stop: ${trainer.n_epochs} # epochs for early stopping
+  save_dir: "saved"
+  max_grad_norm: 5
+  use_amp: True
+  amp_dtype: fp16
+  grad_accum_steps: 16
+  seed: 1
+lipreader_cfg: ${hydra:runtime.cwd}/src/lipreading_pretrained/config/lrw_resnet18_dctcn.json

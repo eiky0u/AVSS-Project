@@ -122,7 +122,16 @@ class Inferencer(BaseTrainer):
         batch = self.move_batch_to_device(batch)
         batch = self.transform_batch(batch)  # transform batch on device -- faster
 
-        outputs = self.model(**batch)
+        if self.model_type == 'tdfnet':
+            outputs = self.model(**batch)
+            
+        elif self.model_type == 'rtfsnet':
+            v0_0 = self.ve(batch['mouths'][:, 0, :])
+            v0_1 = self.ve(batch['mouths'][:, 1, :])
+            s1 = self.model(v0_0, batch['mix'][:, 0, :]).unsqueeze(1)
+            s2 = self.model(v0_1, batch['mix'][:, 0, :]).unzqueeze(1)
+            outputs = {'preds': torch.stack([s1, s2], dim=1)}
+            
         batch.update(outputs)
 
         if metrics is not None:
@@ -130,9 +139,12 @@ class Inferencer(BaseTrainer):
                 metrics.update(met.name, met(**batch))
 
         preds = batch["preds"].clone().detach().cpu()  # [B, S, T]
-        max_val = preds.abs().max()
-        if max_val > 1.0:
-            preds = preds / max_val
+        max_val_s1 = preds[:, 0, :].abs().max()
+        max_val_s2 = preds[:, 1, :].abs().max()
+        if max_val_s1 > 1.0:
+            preds[:, 0, :] = preds[:, 0, :] / max_val_s1
+        if max_val_s2 > 1.0:
+            preds[:, 1, :] = preds[:, 1, :] / max_val_s2
 
         batch_size = preds.shape[0]
         for i in range(batch_size):

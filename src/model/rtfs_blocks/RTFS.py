@@ -79,10 +79,7 @@ class _BiRNN(nn.Module):
 
 # ...existing code...
 class TFDomainAttention(nn.Module):
-    """
-    TF-domain self-attention (аналог TF-GridNet узла): MHSA над токенами T*F.
-    Вход/выход: [B, D, T, F].
-    """
+
     def __init__(self, dim: int, num_heads: int = 4, dropout: float = 0.1):
         super().__init__()
         self.ln = nn.LayerNorm(dim)
@@ -98,71 +95,7 @@ class TFDomainAttention(nn.Module):
         y, _ = self.attn(y, y, y, need_weights=False)
         tokens = tokens + self.drop(y)
         return tokens.view(B, T, Freq, D).permute(0, 3, 1, 2).contiguous()
-# class TFDomainAttention(nn.Module):
-#     """
-#     TF-GridNet style attention with chunking over the (B*F) dimension to control memory.
-#     Input: x [B, D, T, F]
-#     Output: out [B, D, T, F]
-#     Args:
-#         dim, num_heads, dropout: as usual
-#         chunk_size: number of (B*F) rows to process at once (tune to fit GPU memory)
-#     """
-#     def __init__(self, dim: int, num_heads: int = 4, dropout: float = 0.1,
-#                  ff_hidden_mult: int = 4, chunk_size: int = 32):
-#         super().__init__()
-#         self.dim = dim
-#         self.num_heads = num_heads
-#         self.dropout = dropout
-#         self.chunk_size = chunk_size
 
-#         self.ln1 = nn.LayerNorm(dim)
-#         # batch_first=True so input is [batch, seq, dim]
-#         self.attn = nn.MultiheadAttention(embed_dim=dim, num_heads=num_heads,
-#                                           dropout=dropout, batch_first=True)
-#         self.drop_att = nn.Dropout(dropout)
-
-#         hidden = dim * ff_hidden_mult
-#         self.ln2 = nn.LayerNorm(dim)
-#         self.ffn = nn.Sequential(
-#             nn.Linear(dim, hidden),
-#             nn.ReLU(inplace=True),
-#             nn.Dropout(dropout),
-#             nn.Linear(hidden, dim),
-#             nn.Dropout(dropout),
-#         )
-
-#     def _chunked_attn(self, xf: torch.Tensor) -> torch.Tensor:
-#         # xf: [B*F, T, D]
-#         Bf, T, D = xf.shape
-#         out = xf.new_empty(Bf, T, D)
-#         for i in range(0, Bf, self.chunk_size):
-#             xi = xf[i:i + self.chunk_size]                # [cs, T, D]
-#             xi_ln = self.ln1(xi)
-#             # need_weights=False -> don't store attention weights
-#             attn_out, _ = self.attn(xi_ln, xi_ln, xi_ln, need_weights=False)
-#             attn_out = self.drop_att(attn_out)
-#             out[i:i + attn_out.size(0)] = xi + attn_out   # residual
-#         return out
-
-#     def forward(self, x: torch.Tensor) -> torch.Tensor:
-#         # x: [B, D, T, F]
-#         B, D, T, Freq = x.shape
-#         xf = x.permute(0, 3, 2, 1).contiguous().view(B * Freq, T, D)  # [B*F, T, D]
-
-#         # chunked attention (reduces peak memory)
-#         attn_out = self._chunked_attn(xf)   # [B*F, T, D]
-
-#         # FFN (we can also chunk FFN if needed, but FFN is linear memory)
-#         attn_ln = self.ln2(attn_out)
-#         ffn_out = self.ffn(attn_ln)
-#         out = attn_out + ffn_out  # residual
-
-#         out = out.view(B, Freq, T, D).permute(0, 3, 2, 1).contiguous()  # [B, D, T, F]
-#         return out
-
-
-
-# ...existing code...
 
 class TFAR2D(nn.Module):
     def __init__(self, channels: int, kernel_size=(4,4)):

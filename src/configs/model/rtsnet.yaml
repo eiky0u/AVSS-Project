@@ -1,0 +1,27 @@
+_target_: src.model.RTFSnet
+
+# --- fourier transform / audio encoder ---
+n_fft: 1024
+hop_length: 128
+win_length: 256
+av_channels: 256
+
+# --- video processing ---
+v_channels: 512
+vp_D: 64
+vp_q: 4
+vp_num_heads: 8
+vp_ffn_dim: 128
+vp_dropout: 0.1
+
+# --- audio processing (rtfs blocks) ---
+ap_D: 64
+ap_q: 3
+ap_rnn_hidden: 32
+ap_rnn_layers: 4
+ap_attn_heads: 4
+ap_dropout: 0.1
+
+# --- general / fusion ---
+R: 3                  # number of repetitive processing
+caf_num_heads: 8

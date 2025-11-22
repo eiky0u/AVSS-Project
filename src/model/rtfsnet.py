@@ -10,31 +10,35 @@ from src.model.rtfs_blocks.s3 import SpectralSourceSeparation
 from src.model.rtfs_blocks.decoder import Decoder
 
 
-class Model(nn.Module):
+class RTFSnet(nn.Module):
     def __init__(
             self,
+            #fourier transform parameters
             n_fft=1024, 
             hop_length=128, 
             av_channels=256,
             win_length=256,
 
-            v_channels=512,
+            #video processing block parameters
+            v_channels=512, 
             vp_D=64,
             vp_q=4,
             vp_num_heads=8,
             vp_ffn_dim=128,
             vp_dropout=0.1,
 
+            #audio processing (A.K.A. rtfs) blocks parameters
             ap_D=64,
-            ap_q=2,
+            ap_q=2, # compression power of rtfs block -> trade-off between quality and memory
             ap_rnn_hidden=32,
             ap_rnn_layers=4,
             ap_attn_heads=4,
             ap_dropout=0.1,
+            R=12, # number of repetetive processing of the same rtfs block after fusion
 
+
+            #fusion block params
             caf_num_heads=8,
-
-            R=12,
 
             ):
         
@@ -116,6 +120,6 @@ class Model(nn.Module):
 
         ae = self.sss(ae, a0)  # [B, 256, 251, 513]
 
-        separated = self.decoder(ae, mix_audio.shape[-1])  # [B, 1, 32000]
+        separated = self.decoder(ae, mix_audio.shape[-1])  # [B, 32000]
 
         return separated
