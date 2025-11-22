@@ -22,6 +22,8 @@ class Inferencer(BaseTrainer):
         device,
         dataloaders,
         save_path,
+        model_type,
+        ve,
         metrics=None,
         batch_transforms=None,
         skip_model_load=False,
@@ -52,6 +54,8 @@ class Inferencer(BaseTrainer):
             skip_model_load or config.inferencer.get("from_pretrained") is not None
         ), "Provide checkpoint or set skip_model_load=True"
 
+        self.model_type = model_type
+        self.ve = ve
         self.config = config
         self.cfg_trainer = self.config.inferencer
 
@@ -129,7 +133,7 @@ class Inferencer(BaseTrainer):
             v0_0 = self.ve(batch['mouths'][:, 0, :])
             v0_1 = self.ve(batch['mouths'][:, 1, :])
             s1 = self.model(v0_0, batch['mix'][:, 0, :]).unsqueeze(1)
-            s2 = self.model(v0_1, batch['mix'][:, 0, :]).unzqueeze(1)
+            s2 = self.model(v0_1, batch['mix'][:, 0, :]).unsqueeze(1)
             outputs = {'preds': torch.stack([s1, s2], dim=1)}
             
         batch.update(outputs)

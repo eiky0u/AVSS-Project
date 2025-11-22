@@ -1,5 +1,4 @@
-_target_: src.model.RTFSnet
-
+_target_: src.model.RTFSNet
 # --- fourier transform / audio encoder ---
 n_fft: 1024
 hop_length: 128

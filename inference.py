@@ -36,8 +36,16 @@ def main(config):
 
     # build model architecture, then print to console
     model = instantiate(config.model).to(device)
-    print(model)
+     
+    if 'RTFSNet' in str(config.model._target_):
+        from src.model.rtfs_blocks.ve import video_encoder 
+        ve = video_encoder(pretrained=True, freeze=True)
+        model_type = 'rtfsnet'
+    elif 'TDFNet' in str(config.model._target_):
+        ve = None
+        model_type = 'tdfnet'
 
+    # print(model)
     # get metrics
     metrics = None
     if "metrics" in config and config.metrics is not None:
@@ -46,7 +54,9 @@ def main(config):
     # save_path for model predictions
     save_path = ROOT_PATH / config.inferencer.save_path
     save_path.mkdir(exist_ok=True, parents=True)
-
+    print(config.model._target_)
+    print(model_type)
+    print(config,'Gikausfe asdjkfhasdifkuhsadfsasefasdfasdfsadfsdafsadfsadfasdfsa')
     inferencer = Inferencer(
         model=model,
         config=config,
@@ -54,6 +64,8 @@ def main(config):
         dataloaders=dataloaders,
         batch_transforms=batch_transforms,
         save_path=save_path,
+        model_type=model_type,
+        ve=ve,
         metrics=metrics,
         skip_model_load=False,
     )

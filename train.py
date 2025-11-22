@@ -40,13 +40,14 @@ def main(config):
     
     model = instantiate(config.model).to(device)
 
-    if config.model == 'rtfsnet':
+    if 'RTFSNet' in str(config.model._target_):
         from src.model.rtfs_blocks.ve import video_encoder 
         ve = video_encoder(pretrained=True, freeze=True)
         model_type = 'rtfsnet'
-    elif 'tdfnet' in config.model:
+    elif 'TDFNet' in str(config.model._target_):
         ve = None
         model_type = 'tdfnet'
+
 
     logger.info(model)
     

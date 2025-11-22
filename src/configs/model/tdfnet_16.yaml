@@ -1,5 +1,4 @@
 _target_: src.model.TDFNet
-
 # --- required ---
 pretrained_config_path: ${..lipreader_cfg}
 

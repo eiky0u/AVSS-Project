@@ -10,7 +10,7 @@ from src.model.rtfs_blocks.s3 import SpectralSourceSeparation
 from src.model.rtfs_blocks.decoder import Decoder
 
 
-class RTFSnet(nn.Module):
+class RTFSNet(nn.Module):
     def __init__(
             self,
             #fourier transform parameters

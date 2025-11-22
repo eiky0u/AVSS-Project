@@ -21,7 +21,7 @@ class BaseTrainer:
         criterion,
         metrics,
         optimizer,
-        lr_scheduler,
+        lr_scheduler, 
         config,
         device,
         dataloaders,
@@ -66,9 +66,10 @@ class BaseTrainer:
             accum (int): number of steps for gradient accumulation.
         """
         self.is_train = True
-        self.model_type = model_type
+        
         self.config = config
         self.cfg_trainer = self.config.trainer
+        self.model_type = model_type
         self.ve = ve
         self.device = device
         self.skip_oom = skip_oom
@@ -613,5 +614,7 @@ class BaseTrainer:
 
         if checkpoint.get("state_dict") is not None:
             self.model.load_state_dict(checkpoint["state_dict"])
+        elif checkpoint.get("model_state_dict") is not None:
+            self.model.load_state_dict(checkpoint["model_state_dict"])
         else:
             self.model.load_state_dict(checkpoint)
