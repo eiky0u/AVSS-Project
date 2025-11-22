@@ -107,9 +107,7 @@ class Model(nn.Module):
 
     def forward(self, v0, mix_audio):  
         a0 = self.ae(mix_audio)  # [B, 256, 251, 513]
-        # v1 =   # [B, 512, 50]
-        # a1 =  # [B, 256, 251, 513]
-        
+
 
         ae = self.caf_block(self.ap_block(a0), self.vp_block(v0))  # [B, 256, 251, 513] 
 
