@@ -70,7 +70,7 @@ class BaseTrainer:
         self.config = config
         self.cfg_trainer = self.config.trainer
         self.model_type = model_type
-        self.ve = ve
+        self.ve = ve.to(device)
         self.device = device
         self.skip_oom = skip_oom
 
