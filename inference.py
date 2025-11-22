@@ -39,7 +39,9 @@ def main(config):
     print(model)
 
     # get metrics
-    metrics = instantiate(config.metrics)
+    metrics = None
+    if "metrics" in config and config.metrics is not None:
+        metrics = instantiate(config.metrics)
 
     # save_path for model predictions
     save_path = ROOT_PATH / config.inferencer.save_path

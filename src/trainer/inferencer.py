@@ -168,7 +168,8 @@ class Inferencer(BaseTrainer):
         self.is_train = False
         self.model.eval()
 
-        self.evaluation_metrics.reset()
+        if self.evaluation_metrics is not None:
+            self.evaluation_metrics.reset()
 
         # create Save dir
         if self.save_path is not None:
@@ -189,4 +190,7 @@ class Inferencer(BaseTrainer):
                     metrics=self.evaluation_metrics,
                 )
 
-        return self.evaluation_metrics.result()
+        if self.evaluation_metrics is not None:
+            return self.evaluation_metrics.result()
+        else:
+            return {}

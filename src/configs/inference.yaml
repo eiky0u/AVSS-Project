@@ -1,6 +1,6 @@
 defaults:
   - model: tdfnet_22
-  - metrics: metrics
+  - metrics: null
   - datasets: custom_dataset
   - dataloader: inference
   - transforms: normalize

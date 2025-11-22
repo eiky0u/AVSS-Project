@@ -1,4 +1,4 @@
-val:
+inference:
   _target_: src.datasets.CustomDirDataset
   data_dir: null
   instance_transforms: ${transforms.instance_transforms.inference}
