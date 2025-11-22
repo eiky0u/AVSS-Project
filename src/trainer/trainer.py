@@ -48,9 +48,10 @@ class Trainer(BaseTrainer):
                 outputs = self.model(**batch)
                 
             elif self.model_type == 'rtfsnet':
+                lengths = [batch['mouths'][:, 0, :].size(2)] * batch['mouths'][:, 0, :].size(0)
                 with torch.no_grad():
-                    v0_0 = self.ve(batch['mouths'][:, 0, :])
-                    v0_1 = self.ve(batch['mouths'][:, 1, :])
+                    v0_0 = self.ve(batch['mouths'][:, 0, :].unsqueeze(1), lengths=lengths)
+                    v0_1 = self.ve(batch['mouths'][:, 1, :].unsqueeze(1), lengths=lengths)
                 s1 = self.model(v0_0, batch['mix'][:, 0, :]).unsqueeze(1)
                 s2 = self.model(v0_1, batch['mix'][:, 0, :]).unsqueeze(1)
                 outputs = {'preds': torch.stack([s1, s2], dim=1)}

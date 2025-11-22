@@ -130,10 +130,11 @@ class Inferencer(BaseTrainer):
             outputs = self.model(**batch)
             
         elif self.model_type == 'rtfsnet':
-            v0_0 = self.ve(batch['mouths'][:, 0, :])
-            v0_1 = self.ve(batch['mouths'][:, 1, :])
-            s1 = self.model(v0_0, batch['mix'][:, 0, :]).unsqueeze(1)
-            s2 = self.model(v0_1, batch['mix'][:, 0, :]).unsqueeze(1)
+            lengths = [batch['mouths'][:, 0, :].size(2)] * batch['mouths'][:, 0, :].size(0)
+            v0_0 = self.ve(batch['mouths'][:, 0, :].unsqueeze(1).to(self.device), lengths=lengths)
+            v0_1 = self.ve(batch['mouths'][:, 1, :].unsqueeze(1).to(self.device), lengths=lengths)
+            s1 = self.model(v0_0, batch['mix'][:, 0, :]).to(self.device)
+            s2 = self.model(v0_1, batch['mix'][:, 0, :]).to(self.device)
             outputs = {'preds': torch.stack([s1, s2], dim=1)}
             
         batch.update(outputs)
