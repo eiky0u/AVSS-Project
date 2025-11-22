@@ -563,6 +563,7 @@ class BaseTrainer:
         self.logger.info(f"Loading checkpoint: {resume_path} ...")
         checkpoint = torch.load(resume_path, self.device)
         self.start_epoch = checkpoint["epoch"] + 1
+        
         self.mnt_best = checkpoint["monitor_best"]
 
         # load architecture params from checkpoint.
@@ -574,25 +575,26 @@ class BaseTrainer:
         self.model.load_state_dict(checkpoint["state_dict"])
 
         # load optimizer and scheduler state from checkpoint only when types are not changed.
-        if (
-            checkpoint["config"]["optimizer"] != self.config["optimizer"]
-            or checkpoint["config"]["lr_scheduler"] != self.config["lr_scheduler"]
-        ):
-            self.logger.warning(
-                "Warning: Optimizer or lr_scheduler given in the config file is different "
-                "from that of the checkpoint. Optimizer and scheduler parameters "
-                "are not resumed."
-            )
-        else:
-            self.optimizer.load_state_dict(checkpoint["optimizer"])
-            if checkpoint.get("lr_scheduler") is not None and self.lr_scheduler:
+        if checkpoint.get("lr_scheduler") is not None and self.lr_scheduler:
+                
+            if (
+                checkpoint["config"]["optimizer"] != self.config["optimizer"]
+                or checkpoint["config"]["lr_scheduler"] != self.config["lr_scheduler"]
+            ):
+                self.logger.warning(
+                    "Warning: Optimizer or lr_scheduler given in the config file is different "
+                    "from that of the checkpoint. Optimizer and scheduler parameters "
+                    "are not resumed."
+                )
+            else:
+                self.optimizer.load_state_dict( )
                 self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
-            if "scaler" in checkpoint and self.scaler is not None:
-                self.scaler.load_state_dict(checkpoint["scaler"])
+                if "scaler" in checkpoint and self.scaler is not None:
+                    self.scaler.load_state_dict(checkpoint["scaler"])
 
-        self.logger.info(
-            f"Checkpoint loaded. Resume training from epoch {self.start_epoch}"
-        )
+            self.logger.info(
+                f"Checkpoint loaded. Resume training from epoch {self.start_epoch}"
+            )
 
     def _from_pretrained(self, pretrained_path):
         """
