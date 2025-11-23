@@ -62,7 +62,7 @@ To run inference (and save predictions):
 ```bash
 python inference.py model=MODEL_NAME inferencer.from_pretrained=PATH_TO_WEIGHTS HYDRA_CONFIG_ARGUMENTS
 ```
-where `MODEL_NAME` is one of the `tdfnet_22` `tdfnet_16` `rtfsnet` and `PATH_TO_WEIGHTS` is the path to the weights of the corresponding model.
+where `MODEL_NAME` is one of the `tdfnet_22` `tdfnet_16` `rtfsnet` and `PATH_TO_WEIGHTS` is the path to the weights of the corresponding model. By default predictions are saved into `model_outputs/inference`.
 
 To run the evaluation script:
 ```bash
