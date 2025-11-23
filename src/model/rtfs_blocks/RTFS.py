@@ -257,35 +257,3 @@ class APBlock(nn.Module):
 
     def forward(self, a0: torch.Tensor) -> torch.Tensor:
         return self.core(a0)
-
-class StackedRTFS(nn.Module):
-    def __init__(
-        self,
-        R: int,
-        in_channels: int,    
-        D: int = 64,    
-        q: int = 2,         
-        k_unfold: int = 8,   
-        rnn_hidden: int = 32,  
-        rnn_layers: int = 4,
-        attn_heads: int = 4,
-        dropout: float = 0.1,
-    ):
-        super().__init__()
-        self.R = R
-        self.rtfs = RTFSBlock(
-            in_channels=in_channels,
-            D=D,
-            q=q,
-            k_unfold=k_unfold,
-            rnn_hidden=rnn_hidden,
-            rnn_layers=rnn_layers,
-            attn_heads=attn_heads,
-            dropout=dropout,
-        )
-
-    def forward(self, fused: torch.Tensor, a0: torch.Tensor) -> torch.Tensor:
-        x = fused
-        for _ in range(self.R):
-            x = self.rtfs(x + a0)
-        return x
