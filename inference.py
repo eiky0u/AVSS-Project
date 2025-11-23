@@ -36,14 +36,15 @@ def main(config):
 
     # build model architecture, then print to console
     model = instantiate(config.model).to(device)
-     
-    if 'RTFSNet' in str(config.model._target_):
-        from src.model.rtfs_blocks.ve import video_encoder 
+
+    if "RTFSNet" in str(config.model._target_):
+        from src.model.rtfs_blocks.ve import video_encoder
+
         ve = video_encoder(pretrained=True, freeze=True)
-        model_type = 'rtfsnet'
-    elif 'TDFNet' in str(config.model._target_):
+        model_type = "rtfsnet"
+    elif "TDFNet" in str(config.model._target_):
         ve = None
-        model_type = 'tdfnet'
+        model_type = "tdfnet"
 
     print(model)
     # get metrics
@@ -68,6 +69,14 @@ def main(config):
         skip_model_load=False,
     )
 
+    # Speed-test
+    if getattr(config.inferencer, "speed_test", False):
+        stats = inferencer.run_speed_benchmark()
+        for k, v in stats.items():
+            print(f"    {k:25s}: {v}")
+        return
+
+    # Inference
     logs = inferencer.run_inference()
 
     for part in logs.keys():

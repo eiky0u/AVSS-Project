@@ -18,6 +18,7 @@ wandb
 comet_ml
 hydra-core
 gdown
+thop
 
 black
 isort

@@ -1,9 +1,14 @@
 import torch
+from torch import nn
 from tqdm.auto import tqdm
 import torchaudio
 
 from src.metrics.tracker import MetricTracker
 from src.trainer.base_trainer import BaseTrainer
+
+from thop import profile as thop_profile
+import time
+from pathlib import Path
 
 
 class Inferencer(BaseTrainer):
@@ -126,17 +131,23 @@ class Inferencer(BaseTrainer):
         batch = self.move_batch_to_device(batch)
         batch = self.transform_batch(batch)  # transform batch on device -- faster
 
-        if self.model_type == 'tdfnet':
+        if self.model_type == "tdfnet":
             outputs = self.model(**batch)
-            
-        elif self.model_type == 'rtfsnet':
-            lengths = [batch['mouths'][:, 0, :].size(2)] * batch['mouths'][:, 0, :].size(0)
-            v0_0 = self.ve(batch['mouths'][:, 0, :].unsqueeze(1).to(self.device), lengths=lengths)
-            v0_1 = self.ve(batch['mouths'][:, 1, :].unsqueeze(1).to(self.device), lengths=lengths)
-            s1 = self.model(v0_0, batch['mix'][:, 0, :]).to(self.device)
-            s2 = self.model(v0_1, batch['mix'][:, 0, :]).to(self.device)
-            outputs = {'preds': torch.stack([s1, s2], dim=1)}
-            
+
+        elif self.model_type == "rtfsnet":
+            lengths = [batch["mouths"][:, 0, :].size(2)] * batch["mouths"][
+                :, 0, :
+            ].size(0)
+            v0_0 = self.ve(
+                batch["mouths"][:, 0, :].unsqueeze(1).to(self.device), lengths=lengths
+            )
+            v0_1 = self.ve(
+                batch["mouths"][:, 1, :].unsqueeze(1).to(self.device), lengths=lengths
+            )
+            s1 = self.model(v0_0, batch["mix"][:, 0, :]).to(self.device)
+            s2 = self.model(v0_1, batch["mix"][:, 0, :]).to(self.device)
+            outputs = {"preds": torch.stack([s1, s2], dim=1)}
+
         batch.update(outputs)
 
         if metrics is not None:
@@ -211,3 +222,168 @@ class Inferencer(BaseTrainer):
             return self.evaluation_metrics.result()
         else:
             return {}
+
+    def run_speed_benchmark(self):
+        """
+        Run a benchmark on a single batch from the first dataloader.
+
+        - Single forward pass (for timing & memory)
+        - No saving to disk
+        - No metrics
+        - Reports:
+            * time for one step
+            * peak memory for that batch
+            * MACs (if thop is installed)
+            * total & trainable params (model [+ ve])
+            * checkpoint size on disk
+        """
+        self.is_train = False
+        self.model.eval()
+
+        # take first dataloader
+        _, dataloader = next(iter(self.evaluation_dataloaders.items()))
+        try:
+            batch = next(iter(dataloader))
+        except StopIteration:
+            print("Empty dataloader, cannot run speed benchmark.")
+            return {}
+
+        # move to device & apply transforms
+        batch = self.move_batch_to_device(batch)
+        batch = self.transform_batch(batch)
+
+        # batch size
+        batch_size = None
+        for v in batch.values():
+            if isinstance(v, torch.Tensor):
+                batch_size = v.size(0)
+                break
+
+        # parameter counts (model + optional video encoder)
+        modules = [self.model]
+        if self.ve is not None:
+            modules.append(self.ve)
+
+        total_params = sum(p.numel() for m in modules for p in m.parameters())
+        trainable_params = sum(
+            p.numel() for m in modules for p in m.parameters() if p.requires_grad
+        )
+
+        # checkpoint size
+        ckpt = self.config.inferencer.get("from_pretrained", None)
+        model_size_bytes = None
+        model_size_mb = None
+        if ckpt is not None:
+            path = Path(ckpt)
+            if path.is_file():
+                model_size_bytes = path.stat().st_size
+                model_size_mb = model_size_bytes / (1024**2)
+
+        macs = None
+
+        if self.model_type == "tdfnet":
+
+            class TDFWrapper(nn.Module):
+                def __init__(self, model):
+                    super().__init__()
+                    self.model = model
+
+                def forward(self, batch_dict):
+                    return self.model(**batch_dict)
+
+            wrapper = TDFWrapper(self.model).to(self.device)
+            macs, _ = thop_profile(wrapper, inputs=(batch,), verbose=False)
+
+        elif self.model_type == "rtfsnet":
+
+            class RTFSWrapper(nn.Module):
+                def __init__(self, model, ve, device):
+                    super().__init__()
+                    self.model = model
+                    self.ve = ve
+                    self.device = device
+
+                def forward(self, batch_dict):
+                    mouths = batch_dict["mouths"]
+                    mix = batch_dict["mix"]
+                    lengths = [mouths[:, 0, :].size(2)] * mouths[:, 0, :].size(0)
+                    v0_0 = self.ve(
+                        mouths[:, 0, :].unsqueeze(1).to(self.device),
+                        lengths=lengths,
+                    )
+                    v0_1 = self.ve(
+                        mouths[:, 1, :].unsqueeze(1).to(self.device),
+                        lengths=lengths,
+                    )
+                    s1 = self.model(v0_0, mix[:, 0, :])
+                    s2 = self.model(v0_1, mix[:, 0, :])
+                    return torch.stack([s1, s2], dim=1)
+
+            wrapper = RTFSWrapper(self.model, self.ve, self.device).to(self.device)
+            macs, _ = thop_profile(wrapper, inputs=(batch,), verbose=False)
+
+        # timing & memory
+        device = self.device
+        use_cuda = torch.cuda.is_available() and "cuda" in str(device)
+
+        if use_cuda:
+            torch.cuda.empty_cache()
+            torch.cuda.reset_peak_memory_stats(device=device)
+            torch.cuda.synchronize(device)
+
+        with torch.no_grad():
+            start = time.perf_counter()
+
+            if self.model_type == "tdfnet":
+                _ = self.model(**batch)
+            elif self.model_type == "rtfsnet":
+                lengths = [batch["mouths"][:, 0, :].size(2)] * batch["mouths"][
+                    :, 0, :
+                ].size(0)
+                v0_0 = self.ve(
+                    batch["mouths"][:, 0, :].unsqueeze(1).to(self.device),
+                    lengths=lengths,
+                )
+                v0_1 = self.ve(
+                    batch["mouths"][:, 1, :].unsqueeze(1).to(self.device),
+                    lengths=lengths,
+                )
+                _ = self.model(v0_0, batch["mix"][:, 0, :])
+                _ = self.model(v0_1, batch["mix"][:, 0, :])
+            else:
+                raise ValueError(f"Unknown model_type: {self.model_type}")
+
+            if use_cuda:
+                torch.cuda.synchronize(device)
+            end = time.perf_counter()
+
+        step_time = end - start
+        throughput_examples = (
+            batch_size / step_time if batch_size is not None and step_time > 0 else None
+        )
+        max_memory_bytes = (
+            torch.cuda.max_memory_allocated(device=device) if use_cuda else None
+        )
+        max_memory_mb = (
+            max_memory_bytes / (1024**2) if max_memory_bytes is not None else None
+        )
+
+        stats = {
+            "batch_size": batch_size,
+            "step_time_s": step_time,
+            "throughput_examples_per_s": throughput_examples,
+            "max_memory_bytes": max_memory_bytes,
+            "max_memory_mb": max_memory_mb,
+            "total_params": total_params,
+            "trainable_params": trainable_params,
+            "model_size_bytes": model_size_bytes,
+            "model_size_mb": model_size_mb,
+            "macs": macs,
+        }
+
+        print("\n=== One-batch speed & resource benchmark ===")
+        for k, v in stats.items():
+            print(f"{k}: {v}")
+        print("============================================\n")
+
+        return stats
