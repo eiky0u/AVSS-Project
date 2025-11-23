@@ -12,7 +12,7 @@
 
 ## About
 
-This repository implements an **audio-visual speaker separation (AVSS)** system. The goal is to separate individual speakers from a single-channel audio mixture by leveraging both the **audio track** and **visual cues** from the speakers’ mouth regions.
+This repository implements an **audio-visual speaker separation (AVSS)** system. The goal is to separate individual speakers from a single-channel audio mixture by leveraging both the **audio track** and **visual cues** from the speakers’ mouth regions. [View the complete report](report.pdf)
 
 Our implementations follow the original audio-visual separation architectures proposed in [TDFNet](https://arxiv.org/abs/2401.14185) and [RTFSNet](https://arxiv.org/abs/2309.17189).
 
