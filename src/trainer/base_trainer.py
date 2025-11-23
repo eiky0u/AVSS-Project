@@ -21,13 +21,13 @@ class BaseTrainer:
         criterion,
         metrics,
         optimizer,
-        lr_scheduler, 
+        lr_scheduler,
         config,
         device,
         dataloaders,
         logger,
         writer,
-        model_type='tdfnet',
+        model_type="tdfnet",
         ve=None,
         epoch_len=None,
         skip_oom=True,
@@ -66,7 +66,7 @@ class BaseTrainer:
             accum (int): number of steps for gradient accumulation.
         """
         self.is_train = True
-        
+
         self.config = config
         self.cfg_trainer = self.config.trainer
         self.model_type = model_type
@@ -563,7 +563,7 @@ class BaseTrainer:
         self.logger.info(f"Loading checkpoint: {resume_path} ...")
         checkpoint = torch.load(resume_path, self.device)
         self.start_epoch = checkpoint["epoch"] + 1
-        
+
         self.mnt_best = checkpoint["monitor_best"]
 
         # load architecture params from checkpoint.
@@ -576,7 +576,7 @@ class BaseTrainer:
 
         # load optimizer and scheduler state from checkpoint only when types are not changed.
         if checkpoint.get("lr_scheduler") is not None and self.lr_scheduler:
-                
+
             if (
                 checkpoint["config"]["optimizer"] != self.config["optimizer"]
                 or checkpoint["config"]["lr_scheduler"] != self.config["lr_scheduler"]
@@ -587,7 +587,7 @@ class BaseTrainer:
                     "are not resumed."
                 )
             else:
-                self.optimizer.load_state_dict( )
+                self.optimizer.load_state_dict()
                 self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
                 if "scaler" in checkpoint and self.scaler is not None:
                     self.scaler.load_state_dict(checkpoint["scaler"])
@@ -619,4 +619,4 @@ class BaseTrainer:
         elif checkpoint.get("model_state_dict") is not None:
             self.model.load_state_dict(checkpoint["model_state_dict"])
         else:
-            self.model.load_state_dict(checkpoint)
+            self.model.load_state_dict(checkpoint, strict=False)

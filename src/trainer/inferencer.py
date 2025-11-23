@@ -381,9 +381,4 @@ class Inferencer(BaseTrainer):
             "macs": macs,
         }
 
-        print("\n=== One-batch speed & resource benchmark ===")
-        for k, v in stats.items():
-            print(f"{k}: {v}")
-        print("============================================\n")
-
         return stats

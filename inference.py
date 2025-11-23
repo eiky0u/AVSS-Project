@@ -46,7 +46,6 @@ def main(config):
         ve = None
         model_type = "tdfnet"
 
-    print(model)
     # get metrics
     metrics = None
     if "metrics" in config and config.metrics is not None:
