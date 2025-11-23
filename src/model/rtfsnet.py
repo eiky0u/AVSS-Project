@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from src.model.rtfs_blocks.ae import audio_encoder
 from src.model.rtfs_blocks.VP import VPBlock
-from src.model.rtfs_blocks.RTFS import APBlock, StackedRTFS
+from src.model.rtfs_blocks.RTFS import APBlock
 from src.model.rtfs_blocks.fusion import CAF
 from src.model.rtfs_blocks.s3 import SpectralSourceSeparation
 from src.model.rtfs_blocks.decoder import Decoder
