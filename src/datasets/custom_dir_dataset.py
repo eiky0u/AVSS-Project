@@ -98,10 +98,8 @@ class CustomDirDataset(BaseDataset):
 
         if not mix_dir.exists():
             raise FileNotFoundError(f"Mix dir not found: {mix_dir}")
-        if not s1_dir.exists():
-            raise FileNotFoundError(f"s1 dir not found: {s1_dir}")
-        if not s2_dir.exists():
-            raise FileNotFoundError(f"s2 dir not found: {s2_dir}")
+
+        targets_available = s1_dir.exists() and s2_dir.exists()
 
         mix_files = sorted(
             p
@@ -113,25 +111,27 @@ class CustomDirDataset(BaseDataset):
         for mix_path in tqdm(mix_files, desc=f"Creating index"):
             base = mix_path.stem  # expected 'spk1_spk2'
             s1_path, s2_path = None, None
-            for ext in self._AUDIO_EXTENSIONS:
-                cand = f"{base}{ext}"
 
-                cand_s1 = s1_dir / cand
-                if cand_s1.exists():
-                    s1_path = cand_s1
+            if targets_available:
+                for ext in self._AUDIO_EXTENSIONS:
+                    cand = f"{base}{ext}"
 
-                cand_s2 = s2_dir / cand
-                if cand_s2.exists():
-                    s2_path = cand_s2
+                    cand_s1 = s1_dir / cand
+                    if cand_s1.exists():
+                        s1_path = cand_s1
 
-                if s1_path is not None and s2_path is not None:
-                    break
+                    cand_s2 = s2_dir / cand
+                    if cand_s2.exists():
+                        s2_path = cand_s2
 
-            if s1_path is None or s2_path is None:
-                raise FileNotFoundError(
-                    f"Targets for '{base}' not found in {s1_dir} / {s2_dir} "
-                    f"with extensions {self._AUDIO_EXTENSIONS}"
-                )
+                    if s1_path is not None and s2_path is not None:
+                        break
+
+                if s1_path is None or s2_path is None:
+                    raise FileNotFoundError(
+                        f"Targets for '{base}' not found in {s1_dir} / {s2_dir} "
+                        f"with extensions {self._AUDIO_EXTENSIONS}"
+                    )
 
             spk_ids = base.split("_")
             spk_1, spk_2 = spk_ids[0], spk_ids[1]
@@ -149,8 +149,8 @@ class CustomDirDataset(BaseDataset):
                 "mix_path": str(mix_path),
                 "mouth1_path": str(mouth_1_path),
                 "mouth2_path": str(mouth_2_path),
-                "s1_path": str(s1_path),
-                "s2_path": str(s2_path),
+                "s1_path": str(s1_path) if s1_path is not None else None,
+                "s2_path": str(s2_path) if s2_path is not None else None,
             }
             index.append(item)
 

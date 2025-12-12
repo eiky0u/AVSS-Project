@@ -47,7 +47,7 @@ def pair_files(gt_root: Path, pred_root: Path, speaker: str):
 
     Matching is done by filename. Files without corresponding predictions are skipped.
     """
-    gt_dir = gt_root / "audio" / speaker
+    gt_dir = gt_root / speaker
     pred_dir = pred_root / speaker
 
     if not gt_dir.exists():
@@ -210,9 +210,8 @@ def main():
         required=True,
         help=(
             "Path to ground-truth root directory "
-            "(the one containing 'audio/' and 'mouths/'). "
-            "Ground-truth audio is expected in audio/s1 and audio/s2, "
-            "mixtures in audio/mix."
+            "Ground-truth audio is expected in /s1 and /s2, "
+            "mixtures in /mix."
         ),
     )
     parser.add_argument(
@@ -234,11 +233,11 @@ def main():
 
     gt_root = Path(args.gt_root)
     pred_root = Path(args.pred_root)
-    mix_root = gt_root / "audio" / "mix"
+    mix_root = gt_root / "mix"
 
     required_dirs = {
-        "gt_s1": gt_root / "audio" / "s1",
-        "gt_s2": gt_root / "audio" / "s2",
+        "gt_s1": gt_root / "s1",
+        "gt_s2": gt_root / "s2",
         "gt_mix": mix_root,
     }
 

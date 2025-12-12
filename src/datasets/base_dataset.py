@@ -64,8 +64,8 @@ class BaseDataset(Dataset):
         data_dict = self._index[ind]
 
         mix = self.load_audio(data_dict["mix_path"])
-        target1 = self.load_audio(data_dict["s1_path"])
-        target2 = self.load_audio(data_dict["s2_path"])
+        target1 = self.load_audio(data_dict.get("s1_path"))
+        target2 = self.load_audio(data_dict.get("s2_path"))
 
         mouth1 = self.load_mouth(data_dict["mouth1_path"])
         mouth2 = self.load_mouth(data_dict["mouth2_path"])
